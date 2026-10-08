@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Leader Agent</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0D0F12;--bg2:#141720;--bg3:#1C2030;--bg4:#232840;
+    --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);
+    --text:#E8EAF0;--text2:#8890A8;--text3:#555E78;
+    --accent:#5B7FFF;--accent2:#3D5BCC;
+    --green:#2ECC88;--orange:#F5A623;--red:#FF5E5E;--purple:#A78BFA;
+    --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+  }
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+  /* TOPBAR */
+  .topbar{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--bg2);flex-shrink:0}
+  .logo{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:13px;font-weight:500;color:var(--accent)}
+  .space-pill{display:flex;align-items:center;gap:6px;padding:4px 10px;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;font-size:12px;color:var(--text2);font-family:var(--mono)}
+  .dot{width:6px;height:6px;border-radius:50%}
+  .dot-green{background:var(--green)}.dot-orange{background:var(--orange)}.dot-red{background:var(--red)}
+  .topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .agent-status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--green);font-family:var(--mono)}
+  .pulse{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .topbar-btn{padding:5px 12px;border-radius:6px;font-size:11px;font-family:var(--mono);cursor:pointer;border:1px solid var(--border2);background:var(--bg3);color:var(--text2);transition:all .15s}
+  .topbar-btn:hover{background:var(--bg4);color:var(--text)}
+
+  /* LAYOUT */
+  .main{display:flex;flex:1;overflow:hidden}
+
+  /* LEFT PANEL */
+  .left{width:320px;border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;background:var(--bg2)}
+  .panel-header{padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+  .panel-title{font-size:11px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;font-family:var(--mono);flex:1}
+  .count-badge{font-size:10px;font-family:var(--mono);padding:2px 7px;background:var(--bg4);border-radius:4px;color:var(--text2)}
+  .icon-btn{width:24px;height:24px;border-radius:5px;border:1px solid var(--border);background:transparent;color:var(--text3);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0}
+  .icon-btn:hover{background:var(--bg4);color:var(--text);border-color:var(--border2)}
+  .icon-btn.spinning svg{animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .filters{display:flex;gap:2px;padding:7px 10px;border-bottom:1px solid var(--border);flex-shrink:0}
+  .filter-btn{padding:4px 9px;border-radius:5px;font-size:11px;font-family:var(--mono);cursor:pointer;border:none;background:transparent;color:var(--text3);transition:all .15s}
+  .filter-btn.active{background:var(--bg4);color:var(--text)}
+  .filter-btn:hover:not(.active){color:var(--text2)}
+  .task-list{flex:1;overflow-y:auto;padding:6px}
+  .task-list::-webkit-scrollbar{width:3px}
+  .task-list::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+
+  /* TASK CARD */
+  .task-card{padding:10px 12px;border-radius:7px;border:1px solid transparent;margin-bottom:4px;cursor:pointer;transition:all .15s;position:relative}
+  .task-card:hover{background:var(--bg3);border-color:var(--border)}
+  .task-card.selected{background:var(--bg4);border-color:var(--accent)}
+  .task-card.stale{border-left:2px solid var(--orange)}
+  .task-card.critical{border-left:2px solid var(--red)}
+  .task-top{display:flex;align-items:center;gap:6px;margin-bottom:5px}
+  .task-id{font-family:var(--mono);font-size:10px;color:var(--text3)}
+  .task-status{font-size:10px;font-family:var(--mono);padding:2px 6px;border-radius:3px}
+  .st-todo{background:rgba(85,94,120,.3);color:var(--text3)}
+  .st-inprog{background:rgba(91,127,255,.15);color:var(--accent)}
+  .st-review{background:rgba(167,139,250,.15);color:var(--purple)}
+  .st-done{background:rgba(46,204,136,.15);color:var(--green)}
+  .task-stale-tag{margin-left:auto;font-size:10px;font-family:var(--mono);color:var(--orange)}
+  .task-crit-tag{margin-left:auto;font-size:10px;font-family:var(--mono);color:var(--red)}
+  .task-title{font-size:13px;color:var(--text);line-height:1.35;margin-bottom:6px;padding-right:28px}
+  .task-bottom{display:flex;align-items:center;gap:8px}
+  .assignee{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2)}
+  .avatar{width:16px;height:16px;border-radius:50%;font-size:8px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:rgba(91,127,255,.2);color:var(--accent)}
+  .no-assignee{font-size:11px;color:var(--red);font-family:var(--mono)}
+  .due-tag{margin-left:auto;font-size:10px;font-family:var(--mono);color:var(--text3)}
+  .due-soon{color:var(--orange)}
+  .loading-tasks{padding:24px;text-align:center;font-size:12px;color:var(--text3);font-family:var(--mono)}
+  /* per-card follow-up button */
+  .card-fu-btn{position:absolute;top:8px;right:8px;padding:3px 7px;border-radius:4px;font-size:10px;font-family:var(--mono);cursor:pointer;border:1px solid var(--border2);background:var(--bg4);color:var(--accent);opacity:0;transition:opacity .15s;white-space:nowrap}
+  .task-card:hover .card-fu-btn{opacity:1}
+  .card-fu-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+  /* RIGHT */
+  .right{flex:1;display:flex;flex-direction:column;background:var(--bg);min-width:0}
+
+  /* TABS */
+  .tab-bar{display:flex;align-items:center;gap:2px;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--bg2);flex-shrink:0}
+  .tab-btn{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:6px;font-size:11px;font-family:var(--mono);cursor:pointer;border:none;background:transparent;color:var(--text3);transition:all .15s}
+  .tab-btn.active{background:var(--bg4);color:var(--text)}
+  .tab-btn:hover:not(.active){color:var(--text2)}
+  .tab-badge{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--orange);color:#000;font-size:9px;font-weight:700}
+  .tab-right{margin-left:auto;font-size:11px;color:var(--text3);font-family:var(--mono)}
+  .tab-panel{flex:1;display:none;flex-direction:column;overflow:hidden}
+  .tab-panel.active{display:flex}
+
+  /* CHAT */
+  .messages{flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:16px}
+  .messages::-webkit-scrollbar{width:3px}
+  .messages::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+  .msg{display:flex;flex-direction:column;gap:4px;max-width:88%}
+  .msg.user{align-self:flex-end}
+  .msg.agent{align-self:flex-start}
+  .msg-label{font-size:10px;font-family:var(--mono);color:var(--text3);padding:0 4px}
+  .msg.user .msg-label{text-align:right;color:var(--accent)}
+  .bubble{padding:11px 14px;border-radius:12px;font-size:13.5px;line-height:1.65}
+  .msg.user .bubble{background:var(--accent2);color:#fff;border-radius:12px 12px 4px 12px;white-space:pre-wrap}
+  .msg.agent .bubble{background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:12px 12px 12px 4px}
+  .msg.agent .bubble p{margin-bottom:10px}
+  .msg.agent .bubble p:last-child{margin-bottom:0}
+  .msg.agent .bubble strong{color:#fff;font-weight:500}
+  .msg.agent .bubble table{border-collapse:collapse;width:100%;margin:10px 0;font-size:12.5px}
+  .msg.agent .bubble th{background:var(--bg4);color:var(--text2);padding:7px 10px;text-align:left;font-family:var(--mono);font-size:11px;font-weight:500;border:1px solid var(--border2)}
+  .msg.agent .bubble td{padding:7px 10px;border:1px solid var(--border);color:var(--text);vertical-align:top}
+  .msg.agent .bubble tr:hover td{background:var(--bg4)}
+  .msg.agent .bubble a{color:var(--accent);text-decoration:none}
+  .msg.agent .bubble a:hover{text-decoration:underline}
+  .msg.agent .bubble ul,.msg.agent .bubble ol{padding-left:18px;margin:8px 0}
+  .msg.agent .bubble li{margin-bottom:4px;line-height:1.6}
+  .msg.agent .bubble code{font-family:var(--mono);font-size:12px;background:var(--bg4);padding:1px 5px;border-radius:3px;color:var(--purple)}
+  .msg.agent .bubble h2,.msg.agent .bubble h3{color:var(--text);font-weight:500;margin:12px 0 6px}
+  .msg.agent .bubble hr{border:none;border-top:1px solid var(--border);margin:12px 0}
+  .typing{display:flex;gap:4px;padding:14px 16px;align-items:center}
+  .typing span{width:5px;height:5px;background:var(--text3);border-radius:50%;animation:bounce .8s infinite}
+  .typing span:nth-child(2){animation-delay:.15s}
+  .typing span:nth-child(3){animation-delay:.3s}
+  @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-5px)}}
+  .empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:32px}
+  .empty-title{font-size:15px;font-weight:500;color:var(--text2)}
+  .suggestions{display:flex;flex-direction:column;gap:8px;width:100%;max-width:440px}
+  .sug-btn{padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:12.5px;cursor:pointer;text-align:left;transition:all .15s;font-family:var(--sans)}
+  .sug-btn:hover{background:var(--bg3);border-color:var(--border2);color:var(--text)}
+  .input-row{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:10px;align-items:flex-end;background:var(--bg2);flex-shrink:0}
+  .input-wrap{flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:10px;display:flex;align-items:center;padding:2px 6px 2px 12px;transition:border-color .2s}
+  .input-wrap:focus-within{border-color:var(--accent)}
+  textarea{flex:1;background:transparent;border:none;outline:none;color:var(--text);font-family:var(--sans);font-size:13.5px;resize:none;padding:8px 0;line-height:1.5;max-height:120px}
+  textarea::placeholder{color:var(--text3)}
+  .send-btn{width:36px;height:36px;border-radius:8px;background:var(--accent);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;flex-shrink:0}
+  .send-btn:hover{background:var(--accent2)}
+  .send-btn:disabled{opacity:.4;cursor:not-allowed}
+
+  /* FOLLOW-UP TAB */
+  .fu-toolbar{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;background:var(--bg2)}
+  .fu-info{font-size:12px;color:var(--text2);font-family:var(--mono);flex:1;min-width:0}
+  .fu-info strong{color:var(--text)}
+  .fu-sched{font-size:10px;color:var(--text3);font-family:var(--mono);display:flex;align-items:center;gap:5px;flex-shrink:0}
+  .fu-sched-dot{width:5px;height:5px;border-radius:50%;background:var(--green)}
+  .fu-actions{display:flex;gap:6px;flex-shrink:0}
+  .fu-btn{padding:5px 12px;border-radius:6px;font-size:11px;font-family:var(--mono);cursor:pointer;border:none;transition:all .15s;white-space:nowrap}
+  .fu-btn:disabled{opacity:.4;cursor:not-allowed}
+  .fu-btn-primary{background:var(--accent);color:#fff}
+  .fu-btn-primary:hover:not(:disabled){background:var(--accent2)}
+  .fu-btn-send{background:rgba(46,204,136,.15);color:var(--green);border:1px solid rgba(46,204,136,.3)}
+  .fu-btn-send:hover:not(:disabled){background:rgba(46,204,136,.25)}
+  .fu-btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border2)}
+  .fu-btn-ghost:hover:not(:disabled){background:var(--bg4);color:var(--text)}
+  .fu-btn-sm{padding:3px 9px;font-size:10px;border-radius:5px}
+  .fu-body{flex:1;overflow:hidden;display:flex;flex-direction:column}
+  .fu-results{flex:1;overflow-y:auto;padding:12px}
+  .fu-results::-webkit-scrollbar{width:3px}
+  .fu-results::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+  .fu-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:32px;text-align:center}
+  .fu-empty-title{font-size:14px;color:var(--text2)}
+  .fu-empty-sub{font-size:12px;color:var(--text3);font-family:var(--mono);max-width:340px;line-height:1.65}
+  .fu-loading{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+  .fu-loading-text{font-size:12px;color:var(--text2);font-family:var(--mono)}
+  .fu-spinner{width:28px;height:28px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+
+  /* assignee group */
+  .fu-group{margin-bottom:16px}
+  .fu-group-header{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg3);border-radius:7px 7px 0 0;border:1px solid var(--border2);border-bottom:none}
+  .fu-group-avatar{width:28px;height:28px;border-radius:50%;background:rgba(91,127,255,.2);color:var(--accent);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .fu-group-name{font-size:13px;font-weight:500;color:var(--text);flex:1}
+  .fu-group-count{font-size:10px;font-family:var(--mono);color:var(--text3)}
+  .fu-group-send-btn{padding:4px 10px;border-radius:5px;font-size:10px;font-family:var(--mono);cursor:pointer;border:1px solid rgba(46,204,136,.3);background:rgba(46,204,136,.1);color:var(--green);transition:all .15s;white-space:nowrap}
+  .fu-group-send-btn:hover:not(:disabled){background:rgba(46,204,136,.2)}
+  .fu-group-send-btn:disabled{opacity:.4;cursor:not-allowed}
+  .fu-group-body{border:1px solid var(--border2);border-top:none;border-radius:0 0 7px 7px;overflow:hidden}
+
+  /* task item within group */
+  .fu-item{padding:12px 14px;border-top:1px solid var(--border);background:var(--bg2);transition:background .15s}
+  .fu-group-body .fu-item:first-child{border-top:none}
+  .fu-item:hover{background:var(--bg3)}
+  .fu-item.sent{opacity:.6}
+  .fu-item-top{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px}
+  .fu-task-name{font-size:12px;color:var(--text);flex:1;line-height:1.4}
+  .fu-stale-badge{flex-shrink:0;font-size:10px;font-family:var(--mono);color:var(--orange);padding:2px 6px;background:rgba(245,166,35,.1);border-radius:4px;border:1px solid rgba(245,166,35,.15)}
+  .fu-message{font-size:12.5px;color:var(--text2);line-height:1.65;padding:9px 11px;background:var(--bg);border-radius:5px;border:1px solid var(--border);margin-bottom:8px}
+  .fu-item-footer{display:flex;align-items:center;gap:8px}
+  .fu-status{font-size:10px;font-family:var(--mono)}
+  .fu-status.pending{color:var(--text3)}
+  .fu-status.sent{color:var(--green)}
+  .fu-status.failed{color:var(--red)}
+  .fu-task-link{font-size:10px;font-family:var(--mono);color:var(--text3);text-decoration:none}
+  .fu-task-link:hover{color:var(--accent)}
+
+  /* TOAST */
+  .toast{position:fixed;bottom:24px;right:24px;padding:11px 16px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;font-size:12px;font-family:var(--mono);color:var(--text);z-index:999;animation:slideUp .25s ease;pointer-events:none;max-width:320px}
+  .toast.success{border-color:rgba(46,204,136,.4);color:var(--green)}
+  .toast.error{border-color:rgba(255,94,94,.4);color:var(--red)}
+  @keyframes slideUp{from{transform:translateY(16px);opacity:0}to{transform:translateY(0);opacity:1}}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">
+    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+      <circle cx="9" cy="9" r="3" fill="#5B7FFF"/>
+      <circle cx="9" cy="9" r="7.5" fill="none" stroke="#5B7FFF" stroke-width="1"/>
+      <line x1="9" y1="1" x2="9" y2="4" stroke="#5B7FFF" stroke-width="1"/>
+      <line x1="9" y1="14" x2="9" y2="17" stroke="#5B7FFF" stroke-width="1"/>
+      <line x1="1" y1="9" x2="4" y2="9" stroke="#5B7FFF" stroke-width="1"/>
+      <line x1="14" y1="9" x2="17" y2="9" stroke="#5B7FFF" stroke-width="1"/>
+    </svg>
+    leader/agent
+  </div>
+  <div class="space-pill"><span class="dot dot-green"></span><span id="space-label">connecting…</span></div>
+  <div class="topbar-right">
+    <button class="topbar-btn" onclick="clearChat()">new chat</button>
+    <div class="agent-status"><span class="pulse"></span>agent active</div>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- LEFT: task list -->
+  <div class="left">
+    <div class="panel-header">
+      <div class="panel-title">Open Tasks</div>
+      <div class="count-badge" id="task-count">—</div>
+      <button class="icon-btn" id="refresh-btn" onclick="refreshTasks()" title="Refresh">
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+          <path d="M10.5 6A4.5 4.5 0 1 1 6 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+          <path d="M8 1.5l2.5 0 0 2.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="filters">
+      <button class="filter-btn" data-filter="all"         onclick="filterTasks('all',this)">All</button>
+      <button class="filter-btn" data-filter="stale"       onclick="filterTasks('stale',this)">Stale</button>
+      <button class="filter-btn" data-filter="no-assignee" onclick="filterTasks('no-assignee',this)">No Assignee</button>
+      <button class="filter-btn" data-filter="due"         onclick="filterTasks('due',this)">Due Soon</button>
+    </div>
+    <div class="task-list" id="task-list"><div class="loading-tasks">fetching tasks…</div></div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="right">
+    <div class="tab-bar">
+      <button class="tab-btn" id="tab-chat"     onclick="switchTab('chat')">chat</button>
+      <button class="tab-btn" id="tab-followup" onclick="switchTab('followup')">
+        follow-up
+        <span class="tab-badge" id="stale-badge" style="display:none">0</span>
+      </button>
+      <div class="tab-right" id="tab-meta"></div>
+    </div>
+
+    <!-- CHAT PANEL -->
+    <div class="tab-panel" id="panel-chat">
+      <div class="messages" id="messages">
+        <div class="empty-state" id="empty-state">
+          <div class="empty-title">Ask anything about your tasks</div>
+          <div class="suggestions">
+            <button class="sug-btn" onclick="sendSuggestion(this)">Which tasks have been stale for more than 2 days?</button>
+            <button class="sug-btn" onclick="sendSuggestion(this)">Is there any task with no assignee?</button>
+            <button class="sug-btn" onclick="sendSuggestion(this)">What's the overall project health?</button>
+            <button class="sug-btn" onclick="sendSuggestion(this)">Draft a Slack message for all stale tasks</button>
+          </div>
+        </div>
+      </div>
+      <div class="input-row">
+        <div class="input-wrap">
+          <textarea id="chat-input" rows="1" placeholder="Ask about tasks, assignees, blockers…"
+            onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        </div>
+        <button class="send-btn" id="send-btn" onclick="sendMessage()">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M14 8L2 2l2.5 6L2 14l12-6z" fill="white"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- FOLLOW-UP PANEL -->
+    <div class="tab-panel" id="panel-followup">
+      <div class="fu-toolbar">
+        <div class="fu-info" id="fu-info">Generate follow-up messages for all stale tasks</div>
+        <div class="fu-sched" id="fu-sched"><span class="fu-sched-dot"></span>loading schedule…</div>
+        <div class="fu-actions">
+          <button class="fu-btn fu-btn-ghost" id="fu-clear-btn" onclick="clearFollowup()" style="display:none">clear</button>
+          <button class="fu-btn fu-btn-primary" id="fu-run-btn" onclick="runFollowup(true)">generate messages</button>
+          <button class="fu-btn fu-btn-send" id="fu-send-all-btn" onclick="confirmSendAll()" style="display:none">send all</button>
+        </div>
+      </div>
+      <div class="fu-body" id="fu-body">
+        <div class="fu-empty">
+          <svg width="44" height="44" viewBox="0 0 44 44" fill="none" opacity=".2">
+            <circle cx="22" cy="22" r="20" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M14 22h16M22 14v16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <div class="fu-empty-title">No messages yet</div>
+          <div class="fu-empty-sub">Click "generate messages" to preview follow-up DMs. Nothing is sent until you confirm.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+
+// ─── Persistent state ─────────────────────────────────────────────
+const S = {
+  conv:      [],
+  filter:    'all',
+  selTask:   null,
+  tab:       'chat',
+  fuResults: null,   // array of log entries
+  fuIsDry:   true,
+
+  load() {
+    try {
+      this.conv      = JSON.parse(localStorage.getItem('la_conv')   || '[]');
+      this.filter    =            localStorage.getItem('la_filter') || 'all';
+      this.tab       =            localStorage.getItem('la_tab')    || 'chat';
+      this.fuResults = JSON.parse(localStorage.getItem('la_fu')     || 'null');
+      this.fuIsDry   =            localStorage.getItem('la_fu_dry') !== 'false';
+    } catch { /* ignore corrupt storage */ }
+  },
+  saveConv()   { localStorage.setItem('la_conv',   JSON.stringify(this.conv)); },
+  saveFilter() { localStorage.setItem('la_filter', this.filter); },
+  saveTab()    { localStorage.setItem('la_tab',    this.tab); },
+  saveFu()     {
+    localStorage.setItem('la_fu',     JSON.stringify(this.fuResults));
+    localStorage.setItem('la_fu_dry', this.fuIsDry);
+  },
+  clearConv() { this.conv = []; localStorage.removeItem('la_conv'); },
+  clearFu()   {
+    this.fuResults = null;
+    localStorage.removeItem('la_fu');
+    localStorage.removeItem('la_fu_dry');
+  },
+};
+
+let allTasks = [];
+
+// ─── Tasks ────────────────────────────────────────────────────────
+async function loadTasks(spinner = false) {
+  const btn = document.getElementById('refresh-btn');
+  if (spinner) btn.classList.add('spinning');
+  try {
+    const res = await fetch(`${API}/tasks`);
+    if (!res.ok) throw new Error();
+    allTasks = await res.json();
+
+    const staleN = allTasks.filter(t => t.days_stale >= 2 && t.has_assignee).length;
+    document.getElementById('space-label').textContent = 'ClickUp · Live';
+    updateTabMeta();
+    const badge = document.getElementById('stale-badge');
+    badge.textContent = staleN;
+    badge.style.display = staleN > 0 ? 'inline-flex' : 'none';
+    renderTasks();
+    if (spinner) showToast('Tasks refreshed');
+  } catch {
+    document.getElementById('task-list').innerHTML =
+      '<div class="loading-tasks">⚠ Could not reach backend</div>';
+    document.getElementById('space-label').textContent = 'offline';
+  } finally {
+    btn.classList.remove('spinning');
+  }
+}
+
+function refreshTasks() { loadTasks(true); }
+
+function renderTasks() {
+  const now  = Date.now();
+  let tasks  = [...allTasks];
+  if (S.filter === 'stale')       tasks = tasks.filter(t => t.days_stale >= 2);
+  if (S.filter === 'no-assignee') tasks = tasks.filter(t => !t.has_assignee);
+  if (S.filter === 'due')         tasks = tasks.filter(t => t.due_date && (parseInt(t.due_date)-now)/864e5 <= 3);
+
+  document.getElementById('task-count').textContent = tasks.length;
+
+  if (!tasks.length) {
+    document.getElementById('task-list').innerHTML =
+      '<div class="loading-tasks">No tasks match this filter</div>';
+    return;
+  }
+
+  const statusCls = s => ({'to do':'st-todo','in progress':'st-inprog','in review':'st-review','complete':'st-done','done':'st-done'}[s?.toLowerCase()]||'st-todo');
+
+  document.getElementById('task-list').innerHTML = tasks.map(t => {
+    const isCrit  = t.days_stale >= 5 || !t.has_assignee;
+    const isStale = t.days_stale >= 2;
+    const cls = ['task-card', isCrit?'critical':isStale?'stale':'', S.selTask===t.id?'selected':''].join(' ').trim();
+
+    const staleTag = isStale
+      ? `<span class="${isCrit?'task-crit-tag':'task-stale-tag'}">${t.days_stale}d</span>`
+      : '';
+
+    const assigneeHtml = t.has_assignee
+      ? `<div class="assignee"><div class="avatar">${t.assignees[0][0].toUpperCase()}</div>${t.assignees[0]}</div>`
+      : `<div class="no-assignee">⚠ no assignee</div>`;
+
+    let dueStr = 'no due date', dueCls = 'due-tag';
+    if (t.due_date) {
+      const d = Math.ceil((parseInt(t.due_date)-now)/864e5);
+      dueStr = d<0?'overdue':d===0?'due today':d===1?'due tomorrow':`in ${d}d`;
+      if (d<=2) dueCls += ' due-soon';
+    }
+
+    const fuBtn = t.has_assignee
+      ? `<button class="card-fu-btn" onclick="quickFollowup(event,'${t.id}')">follow up →</button>`
+      : '';
+
+    return `<div class="${cls}" onclick="selectTask('${t.id}')">
+      ${fuBtn}
+      <div class="task-top">
+        <span class="task-id">${t.id}</span>
+        <span class="task-status ${statusCls(t.status)}">${t.status||'unknown'}</span>
+        ${staleTag}
+      </div>
+      <div class="task-title">${t.name}</div>
+      <div class="task-bottom">${assigneeHtml}<span class="${dueCls}">${dueStr}</span></div>
+    </div>`;
+  }).join('');
+}
+
+function filterTasks(filter, btn) {
+  S.filter = filter;
+  S.saveFilter();
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === filter));
+  renderTasks();
+}
+
+function selectTask(id) {
+  S.selTask = id;
+  renderTasks();
+  const task = allTasks.find(t => t.id === id);
+  if (task) {
+    switchTab('chat');
+    document.getElementById('chat-input').value =
+      `Tell me about task ${task.id} — "${task.name}". What's the situation and what should I do?`;
+    document.getElementById('chat-input').focus();
+  }
+}
+
+// ─── Quick follow-up from task card ──────────────────────────────
+async function quickFollowup(ev, taskId) {
+  ev.stopPropagation(); // don't select the task card
+  switchTab('followup');
+  S.fuResults = null; // clear old results
+  S.fuIsDry = true;
+  renderFuLoading('Generating follow-up for this task…');
+  try {
+    const res  = await fetch(`${API}/followup/run?dry_run=true&task_id=${encodeURIComponent(taskId)}`, {method:'POST'});
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    S.fuResults = data.log;
+    S.fuIsDry   = true;
+    S.saveFu();
+    renderFuResults();
+    showToast('Preview ready', 'success');
+  } catch(e) {
+    renderFuError(e.message);
+  }
+}
+
+// ─── Tabs ─────────────────────────────────────────────────────────
+function switchTab(tab) {
+  S.tab = tab;
+  S.saveTab();
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.id===`tab-${tab}`));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id===`panel-${tab}`));
+}
+
+function updateTabMeta() {
+  const exchanges = Math.floor(S.conv.length / 2);
+  const n = allTasks.length;
+  document.getElementById('tab-meta').textContent =
+    n ? `${n} tasks · ${exchanges} exchange${exchanges!==1?'s':''}` : '';
+}
+
+// ─── Chat ─────────────────────────────────────────────────────────
+function restoreChat() {
+  if (!S.conv.length) return;
+  document.getElementById('empty-state')?.remove();
+  S.conv.forEach(m => {
+    if (m.role==='user')      _bubble('user',  m.content);
+    if (m.role==='assistant') _bubble('agent', m.content);
+  });
+}
+
+function _bubble(role, text) {
+  const msgs = document.getElementById('messages');
+  const div  = document.createElement('div');
+  div.className = `msg ${role}`;
+  div.innerHTML = `<div class="msg-label">${role==='user'?'You':'Leader Agent'}</div>
+    <div class="bubble">${role==='agent' ? marked.parse(text) : text}</div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function appendMessage(role, text) { document.getElementById('empty-state')?.remove(); _bubble(role,text); }
+
+function showTyping() {
+  document.getElementById('empty-state')?.remove();
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.id='typing'; div.className='msg agent';
+  div.innerHTML='<div class="msg-label">Leader Agent</div><div class="bubble typing"><span></span><span></span><span></span></div>';
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+function removeTyping() { document.getElementById('typing')?.remove(); }
+
+function sendSuggestion(btn) { document.getElementById('chat-input').value=btn.textContent.trim(); sendMessage(); }
+function autoResize(el) { el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,120)+'px'; }
+function handleKey(e) { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();} }
+
+async function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const btn   = document.getElementById('send-btn');
+  const text  = input.value.trim();
+  if (!text) return;
+
+  input.value=''; input.style.height='auto'; btn.disabled=true;
+  appendMessage('user', text);
+  S.conv.push({role:'user', content:text}); S.saveConv();
+  showTyping();
+  document.getElementById('tab-meta').textContent = 'thinking…';
+
+  try {
+    const res  = await fetch(`${API}/chat`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({messages:S.conv})
+    });
+    const data = await res.json();
+    removeTyping();
+    appendMessage('agent', data.reply);
+    S.conv.push({role:'assistant', content:data.reply}); S.saveConv();
+    updateTabMeta();
+  } catch {
+    removeTyping();
+    appendMessage('agent', '⚠ Could not reach the backend. Is the server running?');
+  }
+  btn.disabled=false; input.focus();
+}
+
+function clearChat() {
+  if (!S.conv.length) return;
+  S.clearConv();
+  document.getElementById('messages').innerHTML = `<div class="empty-state" id="empty-state">
+    <div class="empty-title">Ask anything about your tasks</div>
+    <div class="suggestions">
+      <button class="sug-btn" onclick="sendSuggestion(this)">Which tasks have been stale for more than 2 days?</button>
+      <button class="sug-btn" onclick="sendSuggestion(this)">Is there any task with no assignee?</button>
+      <button class="sug-btn" onclick="sendSuggestion(this)">What's the overall project health?</button>
+      <button class="sug-btn" onclick="sendSuggestion(this)">Draft a Slack message for all stale tasks</button>
+    </div>
+  </div>`;
+  updateTabMeta();
+  showToast('Conversation cleared');
+}
+
+// ─── Follow-up helpers ────────────────────────────────────────────
+function renderFuLoading(text = 'Generating messages…') {
+  document.getElementById('fu-run-btn').disabled = true;
+  document.getElementById('fu-send-all-btn').style.display = 'none';
+  document.getElementById('fu-clear-btn').style.display = 'none';
+  document.getElementById('fu-info').textContent = text;
+  document.getElementById('fu-body').innerHTML = `
+    <div class="fu-loading">
+      <div class="fu-spinner"></div>
+      <div class="fu-loading-text">${text.toLowerCase()}</div>
+    </div>`;
+}
+
+function renderFuError(msg) {
+  document.getElementById('fu-run-btn').disabled = false;
+  document.getElementById('fu-info').textContent = 'Error — check server logs';
+  document.getElementById('fu-body').innerHTML = `
+    <div class="fu-empty">
+      <div class="fu-empty-title" style="color:var(--red)">Failed</div>
+      <div class="fu-empty-sub">${msg}</div>
+    </div>`;
+  showToast(msg, 'error');
+}
+
+function renderFuResults() {
+  const results = S.fuResults || [];
+  const isDry   = S.fuIsDry;
+  const sentN   = results.filter(r => r.sent).length;
+
+  document.getElementById('fu-run-btn').disabled = false;
+  document.getElementById('fu-run-btn').textContent = results.length ? 'regenerate' : 'generate messages';
+  document.getElementById('fu-clear-btn').style.display = results.length ? 'inline-flex' : 'none';
+
+  if (isDry) {
+    document.getElementById('fu-info').innerHTML =
+      `<strong>${results.length}</strong> messages ready — preview only, nothing sent yet`;
+    document.getElementById('fu-send-all-btn').style.display = 'inline-flex';
+    document.getElementById('fu-send-all-btn').disabled = false;
+  } else {
+    document.getElementById('fu-info').innerHTML =
+      `<strong>${sentN}</strong> / ${results.length} messages sent via Slack`;
+    document.getElementById('fu-send-all-btn').style.display = 'none';
+  }
+
+  if (!results.length) {
+    document.getElementById('fu-body').innerHTML = `
+      <div class="fu-empty">
+        <div class="fu-empty-title">No stale tasks found</div>
+        <div class="fu-empty-sub">All tasks are up to date — nothing to follow up on.</div>
+      </div>`;
+    return;
+  }
+
+  // Group by assignee
+  const groups = {};
+  results.forEach((item, idx) => {
+    if (!groups[item.assignee]) groups[item.assignee] = [];
+    groups[item.assignee].push({...item, _idx: idx});
+  });
+
+  const html = Object.entries(groups).map(([name, items]) => {
+    const initials = name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    const allSent  = items.every(i => i.sent);
+    const sentCount = items.filter(i=>i.sent).length;
+
+    const groupSendLabel = isDry
+      ? `send to ${name.split(' ')[0]}`
+      : allSent ? `✓ all sent` : `${sentCount}/${items.length} sent`;
+
+    const itemsHtml = items.map(item => {
+      const statusLabel = !isDry ? (item.sent?'✓ sent':'✗ failed') : '· preview';
+      const statusCls   = !isDry ? (item.sent?'sent':'failed') : 'pending';
+      const sendBtnHtml = isDry
+        ? `<button class="fu-btn fu-btn-send fu-btn-sm" onclick="sendSingleTask(${item._idx})">send</button>`
+        : '';
+      return `<div class="fu-item ${!isDry&&item.sent?'sent':''}" id="fu-item-${item._idx}">
+        <div class="fu-item-top">
+          <div class="fu-task-name">${item.task_name}</div>
+          <div class="fu-stale-badge">${item.days_stale}d stale</div>
+        </div>
+        <div class="fu-message">${item.message}</div>
+        <div class="fu-item-footer">
+          <span class="fu-status ${statusCls}">${statusLabel}</span>
+          ${item.task_url ? `<a class="fu-task-link" href="${item.task_url}" target="_blank">open task ↗</a>` : ''}
+          ${sendBtnHtml}
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div class="fu-group">
+      <div class="fu-group-header">
+        <div class="fu-group-avatar">${initials}</div>
+        <div class="fu-group-name">${name}</div>
+        <div class="fu-group-count">${items.length} task${items.length!==1?'s':''}</div>
+        <button class="fu-group-send-btn" id="fu-gsend-${encodeURIComponent(name)}"
+          onclick="sendAssignee('${name.replace(/'/g,"\\'")}',this)" ${allSent||!isDry?'disabled':''}>
+          ${groupSendLabel}
+        </button>
+      </div>
+      <div class="fu-group-body">${itemsHtml}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('fu-body').innerHTML = `<div class="fu-results">${html}</div>`;
+}
+
+// ─── Follow-up actions ────────────────────────────────────────────
+async function runFollowup(dryRun, params = '') {
+  renderFuLoading(dryRun ? 'Generating messages…' : 'Sending messages…');
+  try {
+    const url = `${API}/followup/run?dry_run=${dryRun}${params}`;
+    const res  = await fetch(url, {method:'POST'});
+    if (!res.ok) throw new Error(`Server error ${res.status}`);
+    const data = await res.json();
+    S.fuResults = data.log;
+    S.fuIsDry   = dryRun;
+    S.saveFu();
+    renderFuResults();
+    showToast(`${data.tasks_found} messages ${dryRun?'generated':'sent'}`, 'success');
+  } catch(e) {
+    renderFuError(e.message);
+  }
+}
+
+async function sendSingleTask(idx) {
+  const item = S.fuResults[idx];
+  if (!item) return;
+
+  const btn = document.querySelector(`#fu-item-${idx} .fu-btn-send`);
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+
+  try {
+    const res = await fetch(`${API}/followup/send`, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({assignee: item.assignee, task_url: item.task_url, message: item.message})
+    });
+    const data = await res.json();
+    S.fuResults[idx].sent = data.sent;
+    S.saveFu();
+    if (data.sent) {
+      showToast(`Sent to ${item.assignee}`, 'success');
+    } else {
+      showToast('Send failed — check Zapier', 'error');
+    }
+    renderFuResults();
+  } catch(e) {
+    showToast(e.message, 'error');
+    if (btn) { btn.disabled=false; btn.textContent='send'; }
+  }
+}
+
+async function sendAssignee(name, btn) {
+  if (!confirm(`Send follow-ups to ${name} for all their stale tasks?`)) return;
+  btn.disabled = true;
+  btn.textContent = 'sending…';
+
+  const assigneeTasks = (S.fuResults||[]).filter(i => i.assignee === name);
+  let anyFailed = false;
+
+  for (let i = 0; i < assigneeTasks.length; i++) {
+    const item = assigneeTasks[i];
+    const idx  = S.fuResults.indexOf(item);
+    try {
+      const res = await fetch(`${API}/followup/send`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({assignee:item.assignee, task_url:item.task_url, message:item.message})
+      });
+      const data = await res.json();
+      S.fuResults[idx].sent = data.sent;
+      if (!data.sent) anyFailed = true;
+    } catch {
+      anyFailed = true;
+    }
+  }
+
+  S.fuIsDry = false;
+  S.saveFu();
+  renderFuResults();
+  showToast(anyFailed ? 'Some messages failed to send' : `All sent to ${name}`, anyFailed?'error':'success');
+}
+
+function confirmSendAll() {
+  const n = (S.fuResults||[]).length;
+  if (!confirm(`Send ${n} Slack DMs to team members?\n\nThis will message each assignee directly.`)) return;
+  // Mark as non-dry and send via API
+  runFollowup(false);
+}
+
+function clearFollowup() {
+  S.clearFu();
+  document.getElementById('fu-run-btn').textContent = 'generate messages';
+  document.getElementById('fu-run-btn').disabled = false;
+  document.getElementById('fu-send-all-btn').style.display = 'none';
+  document.getElementById('fu-clear-btn').style.display = 'none';
+  document.getElementById('fu-info').textContent = 'Generate follow-up messages for all stale tasks';
+  document.getElementById('fu-body').innerHTML = `
+    <div class="fu-empty">
+      <svg width="44" height="44" viewBox="0 0 44 44" fill="none" opacity=".2">
+        <circle cx="22" cy="22" r="20" stroke="currentColor" stroke-width="1.5"/>
+        <path d="M14 22h16M22 14v16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      <div class="fu-empty-title">No messages yet</div>
+      <div class="fu-empty-sub">Click "generate messages" to preview follow-up DMs. Nothing is sent until you confirm.</div>
+    </div>`;
+}
+
+// ─── Scheduler info ───────────────────────────────────────────────
+async function loadSchedule() {
+  try {
+    const res  = await fetch(`${API}/followup/schedule`);
+    const data = await res.json();
+    document.getElementById('fu-sched').innerHTML =
+      `<span class="fu-sched-dot"></span>auto: ${data.label}`;
+  } catch {
+    document.getElementById('fu-sched').textContent = '';
+  }
+}
+
+// ─── Toast ────────────────────────────────────────────────────────
+function showToast(msg, type = '') {
+  document.querySelector('.toast')?.remove();
+  const el = document.createElement('div');
+  el.className=`toast ${type}`; el.textContent=msg;
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(), 2800);
+}
+
+// ─── Boot ─────────────────────────────────────────────────────────
+S.load();
+switchTab(S.tab);
+document.querySelectorAll('.filter-btn').forEach(b =>
+  b.classList.toggle('active', b.dataset.filter === S.filter));
+restoreChat();
+updateTabMeta();
+if (S.fuResults) renderFuResults();
+loadTasks();
+loadSchedule();
+</script>
+</body>
+</html>
